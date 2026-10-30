@@ -1,0 +1,130 @@
+---
+title: "ARCHY-459-week-4"
+format: gfm
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(randomForest)
+library(parsnip)
+
+tidymodels_prefer()
+
+```
+
+# Import and tidy
+
+```{r}
+marks <- read.csv("data sheet 3.csv") |>
+  mutate(Trace.Type = factor(str_to_lower(Trace.Type)))
+
+```
+
+Split the data
+
+```{r}
+#|label: split
+
+set.seed(459)
+marks_split <- initial_split(marks, prop = 0.8, strata =Trace.Type)
+marks_train <- training(marks_split)
+marks_test <- testing(marks_split)
+```
+
+```{r}
+#|label: measurements-plot
+
+marks_train |>
+  select(Trace.Type, Projected.Area:Ra) |>
+  pivot_longer(
+    cols = -Trace.Type,
+    names_to = "feature",
+    values_to = "value"
+  ) |>
+  ggplot(aes(x = Trace.Type, y = log10(value), fill = Trace.Type)) +
+  geom_boxplot() +
+  facet_wrap(~feature, scales = "free_y") +
+  scale_fill_viridis_d() +
+  labs(
+    x = "Trace type",
+    y = expression(log[10](measurement)),
+    fill = "Trace type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "bottom"
+  )
+```
+
+## Baseline
+
+```{r}
+clas_props <-
+marks_train |>
+  count(Trace.Type) |>
+  mutate(prop = n / sum(n))
+
+baseline_accuracy <- round(max(clas_props$prop), 2)
+```
+
+Our baseline accuracy is 'r baseline_accuracy', so any model we create must beat this number to be useful
+
+```{r}
+marks_rec <-
+recipe(Trace.Type ~ . ,
+       data = marks_train) |>
+  update_role(all_nominal_predictors(),
+              new_role = "metadata")
+```
+
+## One Random Forest and its Out of Bag error
+
+```{r}
+#|lable: rf
+
+# model specifications: 3 measures tried per split
+rf_spec <-
+  rand_forest(mtry = 3, trees = 500) |>
+  set_engine("randomForest", importance = TRUE) |>
+  set_mode("classification")
+
+#fit the recipe and spec to our training set
+set.seed(459)
+rf_one <- workflow(marks_rec, rf_spec) |>
+  fit(marks_train)
+
+rf_engine <- extract_fit_engine(rf_one)
+
+oob_accuracy <- accuracy_vec(truth = marks_train$Trace.Type,
+                             estimate = rf_engine$predicted)
+
+```
+
+Out of Bag accuracy of our model is 'r round(oob_accuracy, 2)'
+
+##Feature importance
+
+```{r}
+#|label: feature-importance
+#|fig-cap: "After training the data, the calculated baseline accuracy is the way you can tell how good a random forest is by comparing the accuracy of the model used to the baseline accuracy. The forest can go wrong if it is not trained properly or if the recipe/specifications are not fit prperly to the training set. The use of Gini feature importance can calculated how relevant a feature is to the data and its contribution to the model's predication accuracy."
+
+importance(rf_engine) |>
+  as.data.frame() |>
+  rownames_to_column("feature") |>
+  select(feature, MeanDecreaseGini) |>
+  mutate(feature = fct_reorder(feature, MeanDecreaseGini)) |>
+  ggplot(aes(x = feature, y = MeanDecreaseGini, fill = MeanDecreaseGini)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_viridis_c() +
+  labs(
+    title = "Feature Importance (Gini)",
+    x = "Feature",
+    y = "Mean decrease in Gini",
+    fill = "Mean decrease\nin Gini"
+  ) +
+  theme_minimal()
+```
+
