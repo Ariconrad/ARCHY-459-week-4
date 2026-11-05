@@ -34,7 +34,10 @@ marks_test <- testing(marks_split)
 
 ```{r}
 #|label: measurements-plot
+<<<<<<< HEAD
 #|Fig-cap: "This measurment plot compares the four different trace types of 12 variables from the dataset. Similarities between cut and trample types share similarities in many of the variables explored in the dataset, which may cause issues in while using random forest. The values are not the exact same, but consistency of similarities could cause confusion to the model. This possible confusion between the two similar types could cause the model to memorize the data instead of recognizing patterns, and also might lead to a slightly lower mean decrease in Gini."
+=======
+>>>>>>> 4b93f8688a10a979651cb57f4964350091f64d51
 
 marks_train |>
   select(Trace.Type, Projected.Area:Ra) |>
